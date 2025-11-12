@@ -44,12 +44,17 @@ float frand() {
 } // 这个函数应该没有什么可以优化的地方
 
 // 这个结构体可能可以优化成SOA
+/*@LLM_suggestion:
+ * 考虑将AOS转换为SOA结构，将相同属性的数据连续存储以提高SIMD向量化效率和缓存命中率*/
 struct Star {
   float px, py, pz;
   float vx, vy, vz;
   float mass;
 };
 
+/*@LLM_suggestion:
+ * 考虑使用aligned_alloc或posix_memalign确保内存对齐，提高SIMD加载效率*/
+/*@LLM_suggestion: 可以考虑使用预取指令(_mm_prefetch)来减少内存访问延迟*/
 std::vector<Star> stars;
 
 /*
@@ -77,14 +82,21 @@ float eps = 0.001;
 float dt = 0.01;
 
 // 这里可以大量优化
+/*@LLM_suggestion:
+ * 可以使用xmmintrin.h手动编写SIMD指令，使用_mm_load_ps、_mm_sub_ps等指令并行处理多个浮点数*/
+/*@LLM_suggestion:
+ * sqrt(d2)可以用快速倒数平方根算法(Q_rsqrt)近似计算，大幅提升性能*/
+/*@LLM_suggestion: 可以避免自交互计算(i == j的情况)，减少不必要的计算*/
+/*@LLM_suggestion:
+ * 可以利用引力的对称性，将计算结果同时更新两个星体，减少一半计算量*/
+/*@LLM_suggestion: 考虑使用融合乘加指令(FMA)来优化乘加运算*/
+/*@LLM_suggestion:
+ * 可以重新组织循环顺序，将内层循环向量化，外层循环处理不同星体*/
 /*
-  1.
-  非const引用/指针可以加上__restrict表示不会出现指针/引用重叠，从而允许编译器做激进的SIMD优化
+  1. 非const引用/指针可以加上__restrict表示不会出现指针/引用重叠，从而允许编译器做激进的SIMD优化
   2. 使用std::sqrt()而不是C语言的遗产sqrt()
-  3. 不要重复计算循环不变量 other.mass * G * dt / d2
-  ，把他挪到外面去（用一个变量提前算好并储存）
-  4. 可以使用#pragma omp simd
-  从而允许编译器忽略可能存在的数据依赖（包含指针重叠），从而鼓励（而不是强制）编译器进行向量化
+  3. 不要重复计算循环不变量 other.mass * G * dt / d2，把他挪到外面去（用一个变量提前算好并储存）
+  4. 可以使用#pragma omp simd 从而允许编译器忽略可能存在的数据依赖（包含指针重叠），从而鼓励（而不是强制）编译器进行向量化
   5. 小循环体可以使用#pragma
   unroll，因为stars的大小是确定的，为48，刚好是2的N次方，我打算设定展开因子为4
 */
@@ -108,6 +120,9 @@ void step() {
   }
 }
 
+/*@LLM_suggestion:
+ * 在calc()函数中同样可以避免自交互计算和利用对称性来减少重复计算*/
+/*@LLM_suggestion: 可以使用Kahan求和算法来提高浮点累加的精度，避免数值误差累积*/
 /*
   1.
   非const引用/指针可以加上__restrict表示不会出现指针/引用重叠，从而允许编译器做激进的SIMD优化
@@ -138,6 +153,10 @@ template <class Func> long benchmark(Func const &func) {
   return dt.count();
 }
 
+/*@LLM_suggestion:
+ * 可以考虑使用编译器特定的优化指令，如__attribute__((hot))标记热点函数*/
+/*@LLM_suggestion: 可以使用循环分块(blocking)技术来提高缓存利用率*/
+/*@LLM_suggestion: 可以考虑使用profile-guided optimization(PGO)来进一步优化*/
 int main() {
   init();
   printf("Initial energy: %f\n", calc());
