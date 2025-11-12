@@ -39,9 +39,11 @@
 #include <cstdlib>
 #include <vector>
 
+float frand() {
+  return (float)rand() / RAND_MAX * 2 - 1;
+} // 这个函数应该没有什么可以优化的地方
 
-float frand() { return (float)rand() / RAND_MAX * 2 - 1; }
-
+// 这个结构体可能可以优化成SOA
 struct Star {
   float px, py, pz;
   float vx, vy, vz;
@@ -50,6 +52,12 @@ struct Star {
 
 std::vector<Star> stars;
 
+/*
+  1. 可以使用#pragma omp simd
+  从而允许编译器忽略可能存在的数据依赖（包含指针重叠），从而鼓励（而不是强制）编译器进行向量化
+  2. 小循环体可以使用#pragma
+  unroll，因为stars的大小是确定的，为48，刚好是2的N次方，我打算设定展开因子为4
+*/
 void init() {
   for (int i = 0; i < 48; i++) {
     stars.push_back({
@@ -68,6 +76,18 @@ float G = 0.001;
 float eps = 0.001;
 float dt = 0.01;
 
+// 这里可以大量优化
+/*
+  1.
+  非const引用/指针可以加上__restrict表示不会出现指针/引用重叠，从而允许编译器做激进的SIMD优化
+  2. 使用std::sqrt()而不是C语言的遗产sqrt()
+  3. 不要重复计算循环不变量 other.mass * G * dt / d2
+  ，把他挪到外面去（用一个变量提前算好并储存）
+  4. 可以使用#pragma omp simd
+  从而允许编译器忽略可能存在的数据依赖（包含指针重叠），从而鼓励（而不是强制）编译器进行向量化
+  5. 小循环体可以使用#pragma
+  unroll，因为stars的大小是确定的，为48，刚好是2的N次方，我打算设定展开因子为4
+*/
 void step() {
   for (auto &star : stars) {
     for (auto &other : stars) {
@@ -88,6 +108,12 @@ void step() {
   }
 }
 
+/*
+  1.
+  非const引用/指针可以加上__restrict表示不会出现指针/引用重叠，从而允许编译器做激进的SIMD优化
+  2. 小循环体可以使用#pragma
+  unroll，因为stars的大小是确定的，为48，刚好是2的N次方，我打算设定展开因子为4
+*/
 float calc() {
   float energy = 0;
   for (auto &star : stars) {
@@ -116,6 +142,8 @@ int main() {
   init();
   printf("Initial energy: %f\n", calc());
   auto dt = benchmark([&] {
+    // 这里可以优化，编译器能看到step()的实现，在高优化级别下可能会自动内联以消除函数调用开销，
+    // 但由于step()函数包含嵌套循环且较为复杂，最终是否内联取决于编译器的内联阈值和代码膨胀考量
     for (int i = 0; i < 100000; i++)
       step();
   });
