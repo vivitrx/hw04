@@ -1,2 +1,10 @@
 build
 GNUmakefile
+cache_info
+cache_info.cpp
+optimization_comparison_report.md
+simple_optimization_techniques.md
+nbody_sim
+
+# Ignore all .md files
+*.md
